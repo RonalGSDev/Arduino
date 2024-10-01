@@ -1,6 +1,7 @@
 #include <Keypad.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <EEPROM.h> 
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 const byte ROWS = 4;
@@ -20,14 +21,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 
 int bocina = 3;
 
-void setup() {
-  Serial.begin(9600);
-  lcd.init();
-  lcd.backlight();
-  pinMode(bocina, OUTPUT);
-}
-
-String Contra = "1234";
+String Contra;
 String ingreso;
 String auxIngreso;
 
@@ -35,64 +29,57 @@ int contFallos = 1;
 int duplicadorEspera = 1;
 bool puerta = false;
 
+void setup() {
+  Serial.begin(9600);
+  lcd.init();
+  lcd.backlight();
+  pinMode(bocina, OUTPUT);
+  //borrarEEPROM();
+  leerContraMemoria();
+  if (Contra == "") {
+    Contra = "1234";
+    guardarContraMemoria(Contra);
+  }
+}
+
+
+
 void loop() {
+
   char customKey = customKeypad.getKey();
 
-  if (customKey) {
-    tone(bocina, 5000, 100); 
-  }
-
   if (contFallos <= 3) {
+    if (customKey) {
+      tone(bocina, 5000, 100); 
+    }
 
     if (!puerta) {
       lcd.setCursor(0, 0); lcd.print("Password:");
-      
-      if (customKey >= '0' && customKey <= '9') {
-        ingreso += customKey;
-        auxIngreso += "*";
-        lcd.setCursor(0, 1); lcd.print(auxIngreso);
-
-      } else if (customKey == '#')  {
-        if (ingreso.length() > 0) {
-          ingreso.remove(ingreso.length() - 1);
-          auxIngreso.remove(auxIngreso.length() - 1);
-          lcd.clear();
-          lcd.setCursor(0, 1); lcd.print(auxIngreso);
-        }
-
-      } else if (customKey == '*') {
-        ingreso = "";
-        auxIngreso = "";
-        lcd.clear();
-        lcd.setCursor(0, 1); lcd.print(auxIngreso);
-      }
+      ingresoTeclas(customKey,ingreso,auxIngreso);   
     }
 
-    //Verificacion de la contraseña con la tecla A
     if (customKey == 'A' && !puerta) {
       if (ingreso == Contra) {
         lcd.clear();
         lcd.setCursor(4, 0); lcd.print("Password");
         lcd.setCursor(4, 1); lcd.print("Correcto");
         puerta = true;
-        contFallos = 1;
-        duplicadorEspera = 1;
+        contFallos= duplicadorEspera = 1;
+
         //----servo abrir puerta pentiente
         
       } else {
-
+        tone(bocina, 5000, 1000);
         lcd.clear();
         lcd.setCursor(4, 0); lcd.print("Password");
         lcd.setCursor(3, 1); lcd.print("Incorrecto");
         delay(1000);
-
-        lcd.clear();tone(bocina, 5000, 1000);
+        lcd.clear();
         lcd.setCursor(3, 0); lcd.print("Fallo No." + String(contFallos));
          
         contFallos++;
       }
-      ingreso = "";
-      auxIngreso = "";
+      ingreso = auxIngreso = "";
       delay(1000);
       lcd.clear();
     }
@@ -104,25 +91,28 @@ void loop() {
 
       // Cerrar la puerta
       if (customKey == 'B') {
+
         puerta = false;
         lcd.clear();
         lcd.setCursor(0, 0); lcd.print("Cerrando....");
-        delay(3000);
+        delay(2000);
         lcd.clear();
         // ----Servo cerrar puerta pendiente
-      }
 
-      // cambio de contra con la tecla C
+
+      }//cambiar contra
       else if (customKey == 'C') {
+        lcd.clear();
+        lcd.setCursor(0, 0); lcd.print("Nuevo Password:");
         cambiarPassword(); 
       }
     }
 
   } else {
     lcd.clear();
+    lcd.setCursor(0, 0); lcd.print("Intente de nuevo"); 
     for (int i = 10 * duplicadorEspera; i >= 1; i--) {
-      lcd.clear();
-      lcd.setCursor(0, 0); lcd.print("Intente de nuevo"); 
+      lcd.setCursor(4, 1); lcd.print("                            ");
       lcd.setCursor(4, 1); lcd.print("en " + String(i) + " seg");
       tone(bocina, 5000, 100); 
       delay(1000);
@@ -133,55 +123,79 @@ void loop() {
   }
 }
 
+void ingresoTeclas(char& caracter, String& cadena, String& auxCadena){
+
+  if (caracter >= '0' && caracter <= '9') { 
+    cadena += caracter;
+    auxCadena += "*";
+    lcd.setCursor(0, 1); lcd.print(auxCadena);
+
+  }else if (caracter == '#') { 
+    if (cadena.length() > 0) {
+      cadena.remove(cadena.length() - 1);
+      auxCadena.remove(auxCadena.length() - 1);
+      lcd.setCursor(0, 1); lcd.print("                        ");
+      lcd.setCursor(0, 1); lcd.print(auxCadena);
+    }
+  }else if (caracter == '*') {
+    cadena = auxCadena = "";
+    lcd.setCursor(0, 1); lcd.print("                        ");
+    lcd.setCursor(0, 1); lcd.print(auxCadena);
+  }
+}
 
 void cambiarPassword() {
 
   String nuevaContra = "";
-  String nuevaAuxContra = "";
+  String auxNuevaContra = "";
   lcd.clear();
   lcd.setCursor(0, 0); lcd.print("Nuevo Password:");
 
   while (true) {
     //sonido al presionar una tecla
     char customKey = customKeypad.getKey();
-     if (customKey) {
-      tone(bocina, 5000, 100);
+    if (customKey) {
+      tone(bocina, 5000, 100); 
     }
 
-    if (customKey >= '0' && customKey <= '9') { 
-      nuevaContra += customKey;
-      nuevaAuxContra += "*";
-      lcd.setCursor(0, 1); lcd.print(nuevaAuxContra);
-    }
-
-    if (customKey == '#') { 
-      if (nuevaContra.length() > 0) {
-        nuevaContra.remove(nuevaContra.length() - 1);
-        nuevaAuxContra.remove(nuevaAuxContra.length() - 1);
-        lcd.clear();
-        lcd.setCursor(0, 1); lcd.print(nuevaAuxContra);
-      }
-    }
-
-    if (customKey == '*') {
-        nuevaContra = "";
-        nuevaAuxContra = "";
-        lcd.clear();
-        lcd.setCursor(0, 1); lcd.print(nuevaAuxContra);
-      }
-
-    if (customKey == 'D') { 
+    if (customKey == 'D') {
       if (nuevaContra.length() > 0) {
         Contra = nuevaContra;
+        guardarContraMemoria(Contra);
         lcd.clear();
         lcd.setCursor(4, 0); lcd.print("Password");
         lcd.setCursor(4, 1); lcd.print("Cambiado");
         delay(2000);
         lcd.clear();
+        
         break;
       }
+    }else{
+      ingresoTeclas(customKey,nuevaContra,auxNuevaContra);
     }
+  }
+}
 
-    
+
+void leerContraMemoria() {
+  Contra = "";
+  char caracter;
+  for (int i = 0; i < 20; i++) {
+    caracter = EEPROM.read(i);
+    if (caracter == '\0')break;
+    Contra += caracter;
+  }
+}
+
+void guardarContraMemoria(String& contraMemoria) {
+  for (int i = 0; i < contraMemoria.length(); i++) {
+    EEPROM.write(i, contraMemoria[i]);
+  }
+  EEPROM.write(contraMemoria.length(), '\0'); 
+}
+
+void borrarEEPROM() {
+  for (int i = 0; i < 20; i++) { 
+    EEPROM.write(i, '\0');
   }
 }
