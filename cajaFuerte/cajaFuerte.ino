@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h> 
+#include <Servo.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 const byte ROWS = 4;
@@ -29,19 +30,26 @@ int contFallos = 1;
 int duplicadorEspera = 1;
 bool puerta = false;
 
+Servo servoMotor;
+int servoPin = 2; 
+
 void setup() {
   Serial.begin(9600);
   lcd.init();
   lcd.backlight();
   pinMode(bocina, OUTPUT);
+
+  servoMotor.attach(servoPin);
+  servoMotor.write(5);
+
   //borrarEEPROM();
+
   leerContraMemoria();
   if (Contra == "") {
     Contra = "1234";
     guardarContraMemoria(Contra);
   }
 }
-
 
 
 void loop() {
@@ -66,7 +74,7 @@ void loop() {
         puerta = true;
         contFallos= duplicadorEspera = 1;
 
-        //----servo abrir puerta pentiente
+        abrirPuerta();
         
       } else {
         tone(bocina, 5000, 1000);
@@ -97,7 +105,8 @@ void loop() {
         lcd.setCursor(0, 0); lcd.print("Cerrando....");
         delay(2000);
         lcd.clear();
-        // ----Servo cerrar puerta pendiente
+
+        cerrarPuerta();
 
 
       }//cambiar contra
@@ -185,6 +194,14 @@ void leerContraMemoria() {
     if (caracter == '\0')break;
     Contra += caracter;
   }
+}
+
+void abrirPuerta() {
+  servoMotor.write(95);
+}
+
+void cerrarPuerta() {
+  servoMotor.write(5); 
 }
 
 void guardarContraMemoria(String& contraMemoria) {
